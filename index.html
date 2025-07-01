@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Union-Find 可視化ツール</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f7f9;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        header {
+            width: 100%;
+            background-color: #2c3e50;
+            color: white;
+            padding: 20px 0;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 2.5em;
+            letter-spacing: 2px;
+        }
+
+        #controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        button, input[type="number"] {
+            padding: 12px 25px;
+            font-size: 1em;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        button {
+            background-color: #3498db;
+            color: white;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+            transform: translateY(-2px);
+        }
+
+        button.active {
+            background-color: #e74c3c;
+        }
+
+        input[type="number"] {
+            width: 80px;
+            text-align: center;
+            border: 2px solid #ccc;
+        }
+
+        #main-container {
+            width: 90%;
+            max-width: 1200px;
+            margin: 30px auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08);
+            min-height: 70vh;
+        }
+
+        #visualization-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+        }
+
+        #tree-svg, #grid-svg, #graph-svg {
+            width: 100%;
+            height: 600px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .node circle {
+            stroke: #333;
+            stroke-width: 2px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .node text {
+            font-size: 14px;
+            font-weight: bold;
+            fill: #333;
+            user-select: none;
+            pointer-events: none;
+        }
+
+        .link {
+            stroke: #999;
+            stroke-width: 2px;
+            stroke-opacity: 0.6;
+            marker-end: url(#arrowhead);
+        }
+        
+        .root-node circle {
+            fill: #2ecc71 !important;
+            stroke: #27ae60;
+            stroke-width: 3px;
+        }
+        
+        .path-highlight {
+            stroke: #e74c3c !important;
+            stroke-width: 4px !important;
+            stroke-opacity: 1 !important;
+            animation: pulse 1s infinite alternate;
+        }
+
+        @keyframes pulse {
+            from { stroke-width: 2px; }
+            to { stroke-width: 5px; }
+        }
+
+        .grid-cell {
+            stroke: #999;
+            stroke-width: 1px;
+            transition: fill 0.5s ease;
+        }
+
+        .graph-edge {
+            stroke: #666;
+            stroke-width: 2px;
+            transition: stroke 0.5s ease, stroke-width 0.5s ease;
+        }
+        
+        .mst-edge {
+            stroke: #2ecc71;
+            stroke-width: 4px;
+        }
+
+        .rejected-edge {
+            stroke: #e74c3c;
+            stroke-width: 4px;
+            stroke-dasharray: 5, 5;
+        }
+
+        .tooltip {
+            position: absolute;
+            text-align: center;
+            padding: 8px;
+            font: 12px sans-serif;
+            background: #333;
+            color: white;
+            border-radius: 4px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        #info-panel {
+            margin-top: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .info-title {
+            font-weight: bold;
+            font-size: 1.2em;
+            margin-bottom: 10px;
+        }
+
+        .info-item {
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Union-Find 可視化ツール</h1>
+        <p>互いに素な集合の操作を視覚的に理解しましょう。</p>
+        <div id="controls">
+            <button id="reset-button">リセット (N=10)</button>
+            <input type="number" id="union-a" value="0" min="0" max="9">
+            <input type="number" id="union-b" value="1" min="0" max="9">
+            <button id="union-button">Union</button>
+            <input type="number" id="find-node" value="5" min="0" max="9">
+            <button id="find-button">Find</button>
+            <button id="next-step-button" style="display: none;">次のステップ (Kruskal法)</button>
+        </div>
+        <div id="view-buttons" style="margin-top: 15px; display: flex; gap: 10px;">
+            <button id="tree-view-button" class="active">ツリー構造</button>
+            <button id="group-view-button">グループ分け</button>
+            <button id="kruskal-view-button">Kruskal法</button>
+        </div>
+    </header>
+
+    <main id="main-container">
+        <div id="visualization-container">
+            <svg id="tree-svg" style="display: block;">
+                <defs>
+                    <marker id="arrowhead" viewBox="0 -5 10 10" refX="8" refY="0" markerWidth="6" markerHeight="6" orient="auto">
+                        <path d="M0,-5L10,0L0,5" fill="#999" />
+                    </marker>
+                </defs>
+            </svg>
+            <svg id="grid-svg" style="display: none;"></svg>
+            <svg id="graph-svg" style="display: none;"></svg>
+        </div>
+
+        <div id="info-panel">
+            <div class="info-title">現在のステータス</div>
+            <div class="info-item">集合の数: <span id="set-count">10</span></div>
+            <div class="info-item">現在の操作: <span id="current-op">待機中...</span></div>
+        </div>
+    </main>
+
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+
+    <script>
+        const N = 10;
+        let parent = [];
+        let rank = [];
+        let set_count = N;
+        let kruskalEdges = [];
+        let kruskalStep = 0;
+        let isKruskalMode = false;
+        
+        const treeSvg = d3.select("#tree-svg");
+        const gridSvg = d3.select("#grid-svg");
+        const graphSvg = d3.select("#graph-svg");
+
+        const width = 1140;
+        const height = 600;
+        const nodeRadius = 25;
+        const cellSide = 50;
+        const gridCols = Math.floor(width / cellSide);
+
+        treeSvg.attr("width", width).attr("height", height);
+        gridSvg.attr("width", width).attr("height", height);
+        graphSvg.attr("width", width).attr("height", height);
+
+        const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+
+        // Union-Find の初期化
+        function initializeUnionFind() {
+            parent = Array.from({ length: N }, (_, i) => i);
+            rank = Array(N).fill(0);
+            set_count = N;
+            kruskalEdges = generateRandomGraph(N, 20); // 10ノード、20辺のグラフを生成
+            kruskalStep = 0;
+            updateUI();
+            drawAllViews();
+        }
+
+        // --- Union-Find のコアロジック ---
+        
+        // Find (Path Compression 付き)
+        async function find(i) {
+            let path = [];
+            let current = i;
+            while (parent[current] !== current) {
+                path.push(current);
+                current = parent[current];
+            }
+            
+            // Path Compression の可視化
+            for (const node of path) {
+                await highlightPath(node, parent[node], 500);
+            }
+
+            // Path Compression の実行
+            for (const node of path) {
+                parent[node] = current;
+            }
+            
+            await drawTreeView(); // パス圧縮後のツリーを再描画
+            return current;
+        }
+
+        // Union (Union by Rank 付き)
+        async function union(i, j) {
+            let rootI = await find(i);
+            let rootJ = await find(j);
+            
+            if (rootI !== rootJ) {
+                // Union by Rank のロジック
+                if (rank[rootI] < rank[rootJ]) {
+                    parent[rootI] = rootJ;
+                } else if (rank[rootI] > rank[rootJ]) {
+                    parent[rootJ] = rootI;
+                } else {
+                    parent[rootJ] = rootI;
+                    rank[rootI]++;
+                }
+                set_count--;
+                return true; // 集合が結合された
+            }
+            return false; // すでに同じ集合
+        }
+        
+        // --- 可視化描画関数 ---
+
+        // ツリービューを描画
+        async function drawTreeView(highlightPathNodes = []) {
+            treeSvg.selectAll("*").remove(); // SVGをクリア
+            
+            const nodes = d3.range(N).map(i => ({ id: i, parent: parent[i], rank: rank[i] }));
+            const links = nodes.filter(d => d.id !== d.parent).map(d => ({ source: d.id, target: d.parent }));
+
+            const simulation = d3.forceSimulation(nodes)
+                .force("link", d3.forceLink(links).id(d => d.id).distance(100))
+                .force("charge", d3.forceManyBody().strength(-200))
+                .force("center", d3.forceCenter(width / 2, height / 2))
+                .stop();
+
+            simulation.tick(300); // 安定するまでシミュレーションを実行
+
+            const link = treeSvg.append("g")
+                .attr("class", "links")
+                .selectAll("line")
+                .data(links)
+                .enter().append("line")
+                .attr("class", "link")
+                .attr("x1", d => nodes[d.source.id].x)
+                .attr("y1", d => nodes[d.source.id].y)
+                .attr("x2", d => nodes[d.target.id].x)
+                .attr("y2", d => nodes[d.target.id].y);
+
+            const node = treeSvg.append("g")
+                .attr("class", "nodes")
+                .selectAll("g")
+                .data(nodes)
+                .enter().append("g")
+                .attr("class", "node")
+                .attr("transform", d => `translate(${d.x},${d.y})`);
+
+            node.append("circle")
+                .attr("r", nodeRadius)
+                .attr("fill", d => colorScale(findRootSync(d.id))) // 集合ごとに色付け
+                .classed("root-node", d => d.id === d.parent);
+                
+            node.append("text")
+                .attr("dy", ".35em")
+                .attr("text-anchor", "middle")
+                .text(d => `${d.id} (Rank: ${d.rank})`);
+        }
+
+        // グループビューを描画
+        function drawGridView() {
+            gridSvg.selectAll("*").remove();
+            
+            const nodes = d3.range(N).map(i => ({ 
+                id: i, 
+                x: (i % gridCols) * cellSide + cellSide / 2,
+                y: Math.floor(i / gridCols) * cellSide + cellSide / 2,
+                color: colorScale(findRootSync(i))
+            }));
+            
+            gridSvg.selectAll("rect")
+                .data(nodes)
+                .enter().append("rect")
+                .attr("class", "grid-cell")
+                .attr("x", d => d.x - cellSide / 2)
+                .attr("y", d => d.y - cellSide / 2)
+                .attr("width", cellSide)
+                .attr("height", cellSide)
+                .attr("fill", d => d.color);
+
+            gridSvg.selectAll("text")
+                .data(nodes)
+                .enter().append("text")
+                .attr("x", d => d.x)
+                .attr("y", d => d.y)
+                .attr("text-anchor", "middle")
+                .attr("dy", "0.3em")
+                .text(d => d.id)
+                .attr("font-size", "20px")
+                .attr("fill", "white")
+                .style("pointer-events", "none");
+        }
+
+        // Kruskal 法ビューを描画
+        function drawKruskalView() {
+            graphSvg.selectAll("*").remove();
+
+            const nodes = d3.range(N).map(i => ({ 
+                id: i, 
+                x: Math.random() * (width - 100) + 50,
+                y: Math.random() * (height - 100) + 50
+            }));
+
+            const linkData = kruskalEdges.map(edge => ({ 
+                source: nodes[edge.u], 
+                target: nodes[edge.v], 
+                weight: edge.weight,
+                type: edge.type || 'normal' // 'normal', 'mst', 'rejected'
+            }));
+
+            const links = graphSvg.append("g")
+                .attr("class", "links")
+                .selectAll("line")
+                .data(linkData)
+                .enter().append("line")
+                .attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y)
+                .attr("class", d => `graph-edge ${d.type}-edge`);
+
+            const nodesG = graphSvg.append("g")
+                .attr("class", "nodes")
+                .selectAll("circle")
+                .data(nodes)
+                .enter().append("circle")
+                .attr("r", 15)
+                .attr("cx", d => d.x)
+                .attr("cy", d => d.y)
+                .attr("fill", "#3498db")
+                .attr("stroke", "#2980b9")
+                .attr("stroke-width", 2);
+
+            const nodeLabels = graphSvg.append("g")
+                .attr("class", "node-labels")
+                .selectAll("text")
+                .data(nodes)
+                .enter().append("text")
+                .attr("x", d => d.x)
+                .attr("y", d => d.y + 5)
+                .attr("dy", ".31em")
+                .attr("text-anchor", "middle")
+                .text(d => d.id)
+                .attr("fill", "white")
+                .style("pointer-events", "none");
+            
+            // Tooltip for edges
+            const tooltip = d3.select("body").append("div")
+                .attr("class", "tooltip");
+
+            links
+                .on("mouseover", (event, d) => {
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+                    tooltip.html(`Weight: ${d.weight}`)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", () => {
+                    tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
+                });
+        }
+        
+        // 可視化ビューを切り替える
+        function switchView(viewName) {
+            const views = {
+                'tree-svg': 'tree-view-button',
+                'grid-svg': 'group-view-button',
+                'graph-svg': 'kruskal-view-button'
+            };
+
+            for (const svgId in views) {
+                const svg = document.getElementById(svgId);
+                const button = document.getElementById(views[svgId]);
+                if (svgId === viewName) {
+                    svg.style.display = 'block';
+                    button.classList.add('active');
+                } else {
+                    svg.style.display = 'none';
+                    button.classList.remove('active');
+                }
+            }
+            
+            // Kruskalモードのボタン表示を制御
+            isKruskalMode = viewName === 'graph-svg';
+            document.getElementById('next-step-button').style.display = isKruskalMode ? 'block' : 'none';
+            document.getElementById('union-button').style.display = isKruskalMode ? 'none' : 'block';
+            document.getElementById('find-button').style.display = isKruskalMode ? 'none' : 'block';
+            document.getElementById('union-a').style.display = isKruskalMode ? 'none' : 'block';
+            document.getElementById('union-b').style.display = isKruskalMode ? 'none' : 'block';
+            document.getElementById('find-node').style.display = isKruskalMode ? 'none' : 'block';
+            
+            drawAllViews();
+        }
+        
+        // 全てのビューを更新
+        function drawAllViews() {
+            if (document.getElementById('tree-svg').style.display === 'block') {
+                drawTreeView();
+            }
+            if (document.getElementById('grid-svg').style.display === 'block') {
+                drawGridView();
+            }
+            if (document.getElementById('graph-svg').style.display === 'block') {
+                drawKruskalView();
+            }
+        }
+        
+        // 同期版 Find (可視化には使用しない)
+        function findRootSync(i) {
+            if (parent[i] === i) {
+                return i;
+            }
+            return findRootSync(parent[i]);
+        }
+
+        // パスをハイライトするアニメーション
+        function highlightPath(source, target, duration) {
+            return new Promise(resolve => {
+                const nodes = d3.selectAll(".node").data();
+                const sourceNode = nodes.find(d => d.id === source);
+                const targetNode = nodes.find(d => d.id === target);
+
+                if (sourceNode && targetNode) {
+                    const link = treeSvg.selectAll(".link")
+                        .filter(d => (d.source.id === source && d.target.id === target) || (d.target.id === source && d.source.id === target));
+                    
+                    if (!link.empty()) {
+                        link.classed("path-highlight", true);
+                        setTimeout(() => {
+                            link.classed("path-highlight", false);
+                            resolve();
+                        }, duration);
+                    } else {
+                        resolve();
+                    }
+                } else {
+                    resolve();
+                }
+            });
+        }
+        
+        // UI情報の更新
+        function updateUI() {
+            document.getElementById('set-count').textContent = set_count;
+        }
+
+        // ランダムグラフ生成
+        function generateRandomGraph(numNodes, numEdges) {
+            let edges = [];
+            for (let i = 0; i < numEdges; i++) {
+                let u = Math.floor(Math.random() * numNodes);
+                let v = Math.floor(Math.random() * numNodes);
+                while (u === v) { // 自己ループを避ける
+                    v = Math.floor(Math.random() * numNodes);
+                }
+                edges.push({ u: u, v: v, weight: Math.floor(Math.random() * 100) });
+            }
+            edges.sort((a, b) => a.weight - b.weight); // 重みでソート
+            return edges;
+        }
+
+        // --- イベントリスナー ---
+
+        document.getElementById('reset-button').addEventListener('click', () => {
+            initializeUnionFind();
+            document.getElementById('current-op').textContent = 'リセットされました。';
+        });
+
+        document.getElementById('union-button').addEventListener('click', async () => {
+            const a = parseInt(document.getElementById('union-a').value);
+            const b = parseInt(document.getElementById('union-b').value);
+            if (a >= 0 && a < N && b >= 0 && b < N) {
+                document.getElementById('current-op').textContent = `Union(${a}, ${b})を実行中...`;
+                await union(a, b);
+                drawAllViews();
+                updateUI();
+                document.getElementById('current-op').textContent = `Union(${a}, ${b})が完了しました。`;
+            } else {
+                alert(`0から${N-1}までのノード番号を入力してください。`);
+            }
+        });
+
+        document.getElementById('find-button').addEventListener('click', async () => {
+            const node = parseInt(document.getElementById('find-node').value);
+            if (node >= 0 && node < N) {
+                document.getElementById('current-op').textContent = `Find(${node})を実行中...`;
+                await find(node);
+                drawAllViews();
+                document.getElementById('current-op').textContent = `Find(${node})が完了しました。`;
+            } else {
+                alert(`0から${N-1}までのノード番号を入力してください。`);
+            }
+        });
+        
+        document.getElementById('next-step-button').addEventListener('click', async () => {
+            if (!isKruskalMode) return;
+
+            if (kruskalStep < kruskalEdges.length) {
+                const edge = kruskalEdges[kruskalStep];
+                const u = edge.u;
+                const v = edge.v;
+
+                document.getElementById('current-op').textContent = `Kruskal法: 重み ${edge.weight} の辺 (${u}, ${v}) をチェック中...`;
+                
+                // 辺をハイライト
+                d3.selectAll('.graph-edge').data().forEach(d => {
+                    if ((d.source.id === u && d.target.id === v) || (d.source.id === v && d.target.id === u)) {
+                        d.type = 'active';
+                    } else if (d.type === 'active') {
+                         d.type = 'normal'; // Reset previous active edge
+                    }
+                });
+                drawKruskalView();
+                
+                const rootU = await find(u);
+                const rootV = await find(v);
+                
+                if (rootU !== rootV) {
+                    await union(u, v);
+                    edge.type = 'mst';
+                    document.getElementById('current-op').textContent = `辺 (${u}, ${v}) がMSTに追加されました。`;
+                } else {
+                    edge.type = 'rejected';
+                    document.getElementById('current-op').textContent = `辺 (${u}, ${v}) はサイクルを形成するためスキップされました。`;
+                }
+                
+                drawKruskalView(); // 辺のタイプを更新して再描画
+                drawTreeView(); // Union後のツリーを更新
+                drawGridView(); // Union後のグループを更新
+                kruskalStep++;
+            } else {
+                document.getElementById('current-op').textContent = 'Kruskal法が完了しました。';
+            }
+        });
+        
+        document.getElementById('tree-view-button').addEventListener('click', () => switchView('tree-svg'));
+        document.getElementById('group-view-button').addEventListener('click', () => switchView('grid-svg'));
+        document.getElementById('kruskal-view-button').addEventListener('click', () => switchView('graph-svg'));
+
+        // 初期化
+        initializeUnionFind();
+        switchView('tree-svg');
+    </script>
+</body>
+</html>
