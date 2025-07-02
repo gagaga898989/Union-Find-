@@ -40,7 +40,7 @@
             flex-wrap: wrap;
         }
 
-        button, input[type="number"] {
+        button, select {
             padding: 12px 25px;
             font-size: 1em;
             border-radius: 8px;
@@ -65,10 +65,11 @@
             background-color: #e74c3c;
         }
 
-        input[type="number"] {
-            width: 80px;
+        select {
+            width: 100px;
             text-align: center;
             border: 2px solid #ccc;
+            background-color: white;
         }
 
         #main-container {
@@ -160,6 +161,12 @@
             stroke-dasharray: 5, 5;
         }
 
+        .active-edge {
+            stroke: #f39c12;
+            stroke-width: 4px;
+            animation: pulse 0.8s infinite alternate;
+        }
+
         .tooltip {
             position: absolute;
             text-align: center;
@@ -192,6 +199,14 @@
         .info-item {
             margin-bottom: 5px;
         }
+        .explanation {
+            margin-top: 15px;
+            padding: 15px;
+            border-left: 5px solid #3498db;
+            background-color: #ecf0f1;
+            color: #2c3e50;
+            font-size: 0.95em;
+        }
     </style>
 </head>
 <body>
@@ -201,10 +216,13 @@
         <p>互いに素な集合の操作を視覚的に理解しましょう。</p>
         <div id="controls">
             <button id="reset-button">リセット (N=10)</button>
-            <input type="number" id="union-a" value="0" min="0" max="9">
-            <input type="number" id="union-b" value="1" min="0" max="9">
+            <label for="union-a">Union (A):</label>
+            <select id="union-a"></select>
+            <label for="union-b">Union (B):</label>
+            <select id="union-b"></select>
             <button id="union-button">Union</button>
-            <input type="number" id="find-node" value="5" min="0" max="9">
+            <label for="find-node">Find:</label>
+            <select id="find-node"></select>
             <button id="find-button">Find</button>
             <button id="next-step-button" style="display: none;">次のステップ (Kruskal法)</button>
         </div>
@@ -232,6 +250,9 @@
             <div class="info-title">現在のステータス</div>
             <div class="info-item">集合の数: <span id="set-count">10</span></div>
             <div class="info-item">現在の操作: <span id="current-op">待機中...</span></div>
+            <div id="explanation-text" class="explanation">
+                <p><strong>待機中:</strong> Union-Findは、要素がどのグループに属しているかを管理するデータ構造です。</p>
+            </div>
         </div>
     </main>
 
@@ -262,6 +283,37 @@
 
         const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
 
+        // ドロップダウンリストの初期化
+        function populateSelects() {
+            const unionASelect = document.getElementById('union-a');
+            const unionBSelect = document.getElementById('union-b');
+            const findNodeSelect = document.getElementById('find-node');
+
+            unionASelect.innerHTML = '';
+            unionBSelect.innerHTML = '';
+            findNodeSelect.innerHTML = '';
+
+            for (let i = 0; i < N; i++) {
+                const optionA = document.createElement('option');
+                optionA.value = i;
+                optionA.textContent = i;
+                unionASelect.appendChild(optionA);
+
+                const optionB = document.createElement('option');
+                optionB.value = i;
+                optionB.textContent = i;
+                unionBSelect.appendChild(optionB);
+
+                const optionFind = document.createElement('option');
+                optionFind.value = i;
+                optionFind.textContent = i;
+                findNodeSelect.appendChild(optionFind);
+            }
+            unionASelect.value = 0;
+            unionBSelect.value = 1;
+            findNodeSelect.value = 5;
+        }
+
         // Union-Find の初期化
         function initializeUnionFind() {
             parent = Array.from({ length: N }, (_, i) => i);
@@ -286,12 +338,15 @@
             
             // Path Compression の可視化
             for (const node of path) {
-                await highlightPath(node, parent[node], 500);
+                if (node !== current) { // ルートノードへのパスをハイライト
+                    await highlightPath(node, parent[node], 500);
+                }
             }
 
             // Path Compression の実行
+            // パス圧縮後のツリーを再描画する前に、パス圧縮をアニメーションで表示
             for (const node of path) {
-                parent[node] = current;
+                parent[node] = current; // 実際に親を更新
             }
             
             await drawTreeView(); // パス圧縮後のツリーを再描画
@@ -329,10 +384,16 @@
             const links = nodes.filter(d => d.id !== d.parent).map(d => ({ source: d.id, target: d.parent }));
 
             const simulation = d3.forceSimulation(nodes)
-                .force("link", d3.forceLink(links).id(d => d.id).distance(100))
-                .force("charge", d3.forceManyBody().strength(-200))
+                .force("link", d3.forceLink(links).id(d => d.id).distance(nodeRadius * 4)) // ノード間の距離を調整
+                .force("charge", d3.forceManyBody().strength(-300)) // ノード間の反発力を調整
                 .force("center", d3.forceCenter(width / 2, height / 2))
+                .force("x", d3.forceX(width / 2).strength(0.1)) // X軸中央に引き寄せる
+                .force("y", d3.forceY(height / 2).strength(0.1)) // Y軸中央に引き寄せる
                 .stop();
+
+            // 境界内に収めるフォース
+            simulation.force("bounds", boundingBoxForce(0 + nodeRadius, 0 + nodeRadius, width - nodeRadius, height - nodeRadius));
+
 
             simulation.tick(300); // 安定するまでシミュレーションを実行
 
@@ -342,10 +403,10 @@
                 .data(links)
                 .enter().append("line")
                 .attr("class", "link")
-                .attr("x1", d => nodes[d.source.id].x)
-                .attr("y1", d => nodes[d.source.id].y)
-                .attr("x2", d => nodes[d.target.id].x)
-                .attr("y2", d => nodes[d.target.id].y);
+                .attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y);
 
             const node = treeSvg.append("g")
                 .attr("class", "nodes")
@@ -363,7 +424,23 @@
             node.append("text")
                 .attr("dy", ".35em")
                 .attr("text-anchor", "middle")
-                .text(d => `${d.id} (Rank: ${d.rank})`);
+                .text(d => `${d.id} (R:${d.rank})`);
+        }
+
+        // 境界ボックス内にノードを維持するカスタムフォース
+        function boundingBoxForce(x0, y0, x1, y1) {
+            let nodes;
+            function force(alpha) {
+                for (let i = 0, n = nodes.length, node; i < n; ++i) {
+                    node = nodes[i];
+                    if (node.x < x0) node.x = x0;
+                    if (node.y < y0) node.y = y0;
+                    if (node.x > x1) node.x = x1;
+                    if (node.y > y1) node.y = y1;
+                }
+            }
+            force.initialize = _ => nodes = _;
+            return force;
         }
 
         // グループビューを描画
@@ -414,7 +491,7 @@
                 source: nodes[edge.u], 
                 target: nodes[edge.v], 
                 weight: edge.weight,
-                type: edge.type || 'normal' // 'normal', 'mst', 'rejected'
+                type: edge.type || 'normal' // 'normal', 'mst', 'rejected', 'active'
             }));
 
             const links = graphSvg.append("g")
@@ -501,6 +578,9 @@
             document.getElementById('union-a').style.display = isKruskalMode ? 'none' : 'block';
             document.getElementById('union-b').style.display = isKruskalMode ? 'none' : 'block';
             document.getElementById('find-node').style.display = isKruskalMode ? 'none' : 'block';
+            document.querySelector('label[for="union-a"]').style.display = isKruskalMode ? 'none' : 'block';
+            document.querySelector('label[for="union-b"]').style.display = isKruskalMode ? 'none' : 'block';
+            document.querySelector('label[for="find-node"]').style.display = isKruskalMode ? 'none' : 'block';
             
             drawAllViews();
         }
@@ -520,41 +600,110 @@
         
         // 同期版 Find (可視化には使用しない)
         function findRootSync(i) {
-            if (parent[i] === i) {
-                return i;
+            // Path compression for synchronous find (for coloring)
+            let root = i;
+            while (parent[root] !== root) {
+                root = parent[root];
             }
-            return findRootSync(parent[i]);
+            // Apply path compression
+            let current = i;
+            while (parent[current] !== root) {
+                let next = parent[current];
+                parent[current] = root;
+                current = next;
+            }
+            return root;
         }
 
         // パスをハイライトするアニメーション
-        function highlightPath(source, target, duration) {
+        function highlightPath(sourceId, targetId, duration) {
             return new Promise(resolve => {
-                const nodes = d3.selectAll(".node").data();
-                const sourceNode = nodes.find(d => d.id === source);
-                const targetNode = nodes.find(d => d.id === target);
-
-                if (sourceNode && targetNode) {
-                    const link = treeSvg.selectAll(".link")
-                        .filter(d => (d.source.id === source && d.target.id === target) || (d.target.id === source && d.source.id === target));
-                    
-                    if (!link.empty()) {
-                        link.classed("path-highlight", true);
-                        setTimeout(() => {
-                            link.classed("path-highlight", false);
-                            resolve();
-                        }, duration);
-                    } else {
+                const link = treeSvg.selectAll(".link")
+                    .filter(d => (d.source.id === sourceId && d.target.id === targetId));
+                
+                if (!link.empty()) {
+                    link.classed("path-highlight", true);
+                    setTimeout(() => {
+                        link.classed("path-highlight", false);
                         resolve();
-                    }
+                    }, duration);
                 } else {
                     resolve();
                 }
             });
         }
         
-        // UI情報の更新
-        function updateUI() {
+        // UI情報の更新と解説の表示
+        function updateUI(operation = 'reset', args = {}) {
             document.getElementById('set-count').textContent = set_count;
+            const currentOpText = document.getElementById('current-op');
+            const explanationText = document.getElementById('explanation-text');
+
+            let opDescription = '';
+            let explanation = '';
+
+            switch (operation) {
+                case 'reset':
+                    opDescription = '待機中...';
+                    explanation = `<p><strong>待機中:</strong> Union-Findは、要素がどのグループに属しているかを管理するデータ構造です。まずは「Union」や「Find」を試してみましょう。</p>`;
+                    break;
+                case 'union_start':
+                    opDescription = `Union(${args.a}, ${args.b})を実行中...`;
+                    explanation = `
+                        <p><strong>Union (統合):</strong> 2つの要素（ここでは ${args.a} と ${args.b}）が含まれる集合を結合する操作です。</p>
+                        <p>この操作では、まずそれぞれの要素がどのグループに属しているかを調べ、もし異なるグループに属していれば、それらのグループを一つにまとめます。</p>
+                        <p>「Union by Rank（または Size）」という最適化手法により、グループが偏って大きくなるのを防ぎ、効率を良くしています。</p>
+                    `;
+                    break;
+                case 'union_end':
+                    opDescription = `Union(${args.a}, ${args.b})が完了しました。`;
+                    explanation = `
+                        <p><strong>Union完了:</strong> ${args.a} と ${args.b} が同じグループになりました。</p>
+                        <p>ツリー構造では、一方のグループの代表元（根）がもう一方の代表元の子供になることで、グループの結合が表現されます。</p>
+                    `;
+                    break;
+                case 'find_start':
+                    opDescription = `Find(${args.node})を実行中...`;
+                    explanation = `
+                        <p><strong>Find (探索):</strong> ある要素（ここでは ${args.node}）がどのグループに属しているかを調べる操作です。具体的には、その要素のグループの「代表元」（根ノード）を見つけます。</p>
+                        <p>「Path Compression (経路圧縮)」という最適化手法により、探索中に通った要素全てを直接代表元に繋ぎ変えることで、次回の探索を高速化します。</p>
+                    `;
+                    break;
+                case 'find_end':
+                    opDescription = `Find(${args.node})が完了しました。`;
+                    explanation = `
+                        <p><strong>Find完了:</strong> 要素 ${args.node} の代表元が見つかりました。</p>
+                        <p>経路圧縮により、探索中にたどったパス上のノードがすべて直接代表元に接続され、ツリーが平坦化されました。</p>
+                    `;
+                    break;
+                case 'kruskal_step':
+                    opDescription = `Kruskal法: 重み ${args.weight} の辺 (${args.u}, ${args.v}) をチェック中...`;
+                    explanation = `
+                        <p><strong>Kruskal法:</strong> グラフの「最小全域木（Minimum Spanning Tree, MST）」を見つけるアルゴリズムです。Union-Findを使い、サイクルが形成されないように辺を追加していきます。</p>
+                        <p>現在のステップでは、重みが最も小さい辺 (${args.u}, ${args.v}) を調べています。この辺を追加するとサイクルができるかどうかを、Union-FindのFind操作で判定します。</p>
+                    `;
+                    break;
+                case 'kruskal_added':
+                    opDescription = `辺 (${args.u}, ${args.v}) がMSTに追加されました。`;
+                    explanation = `
+                        <p><strong>Kruskal法 - 辺を追加:</strong> 辺 (${args.u}, ${args.v}) を追加してもサイクルが形成されないため、この辺をMSTに含めました。Union-Findでは、${args.u} と ${args.v} のグループを結合します。</p>
+                    `;
+                    break;
+                case 'kruskal_rejected':
+                    opDescription = `辺 (${args.u}, ${args.v}) はサイクルを形成するためスキップされました。`;
+                    explanation = `
+                        <p><strong>Kruskal法 - 辺をスキップ:</strong> 辺 (${args.u}, ${args.v}) を追加すると、すでにMSTにある辺と合わせてサイクルが形成されてしまうため、この辺はスキップされました。Union-Findでは、${args.u} と ${args.v} はすでに同じグループに属していると判定されました。</p>
+                    `;
+                    break;
+                case 'kruskal_complete':
+                    opDescription = 'Kruskal法が完了しました。';
+                    explanation = `
+                        <p><strong>Kruskal法完了:</strong> すべての辺を処理し終え、最小全域木が構築されました。</p>
+                    `;
+                    break;
+            }
+            currentOpText.textContent = opDescription;
+            explanationText.innerHTML = explanation;
         }
 
         // ランダムグラフ生成
@@ -563,7 +712,8 @@
             for (let i = 0; i < numEdges; i++) {
                 let u = Math.floor(Math.random() * numNodes);
                 let v = Math.floor(Math.random() * numNodes);
-                while (u === v) { // 自己ループを避ける
+                // 同じノードへの辺や重複する辺を避ける
+                while (u === v || edges.some(e => (e.u === u && e.v === v) || (e.u === v && e.v === u))) { 
                     v = Math.floor(Math.random() * numNodes);
                 }
                 edges.push({ u: u, v: v, weight: Math.floor(Math.random() * 100) });
@@ -576,32 +726,32 @@
 
         document.getElementById('reset-button').addEventListener('click', () => {
             initializeUnionFind();
-            document.getElementById('current-op').textContent = 'リセットされました。';
+            populateSelects(); // リセット時にドロップダウンも更新
+            updateUI('reset');
         });
 
         document.getElementById('union-button').addEventListener('click', async () => {
             const a = parseInt(document.getElementById('union-a').value);
             const b = parseInt(document.getElementById('union-b').value);
             if (a >= 0 && a < N && b >= 0 && b < N) {
-                document.getElementById('current-op').textContent = `Union(${a}, ${b})を実行中...`;
+                updateUI('union_start', {a, b});
                 await union(a, b);
                 drawAllViews();
-                updateUI();
-                document.getElementById('current-op').textContent = `Union(${a}, ${b})が完了しました。`;
+                updateUI('union_end', {a, b});
             } else {
-                alert(`0から${N-1}までのノード番号を入力してください。`);
+                alert(`0から${N-1}までのノード番号を選択してください。`);
             }
         });
 
         document.getElementById('find-button').addEventListener('click', async () => {
             const node = parseInt(document.getElementById('find-node').value);
             if (node >= 0 && node < N) {
-                document.getElementById('current-op').textContent = `Find(${node})を実行中...`;
+                updateUI('find_start', {node});
                 await find(node);
                 drawAllViews();
-                document.getElementById('current-op').textContent = `Find(${node})が完了しました。`;
+                updateUI('find_end', {node});
             } else {
-                alert(`0から${N-1}までのノード番号を入力してください。`);
+                alert(`0から${N-1}までのノード番号を選択してください。`);
             }
         });
         
@@ -613,17 +763,15 @@
                 const u = edge.u;
                 const v = edge.v;
 
-                document.getElementById('current-op').textContent = `Kruskal法: 重み ${edge.weight} の辺 (${u}, ${v}) をチェック中...`;
+                updateUI('kruskal_step', {u, v, weight: edge.weight});
                 
                 // 辺をハイライト
-                d3.selectAll('.graph-edge').data().forEach(d => {
-                    if ((d.source.id === u && d.target.id === v) || (d.source.id === v && d.target.id === u)) {
-                        d.type = 'active';
-                    } else if (d.type === 'active') {
-                         d.type = 'normal'; // Reset previous active edge
-                    }
-                });
-                drawKruskalView();
+                kruskalEdges.forEach(e => { e.type = 'normal'; }); // すべての辺をリセット
+                edge.type = 'active'; // 現在の辺をアクティブに
+                drawKruskalView(); // アクティブな辺を強調表示
+
+                // 少し待ってからUnion-Findのロジックを開始
+                await new Promise(resolve => setTimeout(resolve, 800)); // アニメーションのために一時停止
                 
                 const rootU = await find(u);
                 const rootV = await find(v);
@@ -631,10 +779,10 @@
                 if (rootU !== rootV) {
                     await union(u, v);
                     edge.type = 'mst';
-                    document.getElementById('current-op').textContent = `辺 (${u}, ${v}) がMSTに追加されました。`;
+                    updateUI('kruskal_added', {u, v});
                 } else {
                     edge.type = 'rejected';
-                    document.getElementById('current-op').textContent = `辺 (${u}, ${v}) はサイクルを形成するためスキップされました。`;
+                    updateUI('kruskal_rejected', {u, v});
                 }
                 
                 drawKruskalView(); // 辺のタイプを更新して再描画
@@ -642,7 +790,7 @@
                 drawGridView(); // Union後のグループを更新
                 kruskalStep++;
             } else {
-                document.getElementById('current-op').textContent = 'Kruskal法が完了しました。';
+                updateUI('kruskal_complete');
             }
         });
         
@@ -652,6 +800,7 @@
 
         // 初期化
         initializeUnionFind();
+        populateSelects(); // ドロップダウンを初期化
         switchView('tree-svg');
     </script>
 </body>
